@@ -1,6 +1,8 @@
-mod tests;
-mod arena;
+pub mod tests;
+pub mod arena;
+
+use tests::*;
 
 fn main() {
-    println!("Hello, world!");
+    //...
 }

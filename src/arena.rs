@@ -1,7 +1,7 @@
 const DEFAULT_CAPACITY: usize = 1024;
 
 #[derive(Debug)]
-enum ArenaError {
+pub enum ArenaError {
     AllocationError,
     AlignmentError,
 }
@@ -97,7 +97,15 @@ impl <const N: usize> Arena<N> {
     where
         T: Copy,
     {
-
+        let byte_size = src.len() * core::mem::size_of::<T>();
+        let allocated_bytes: &mut [u8] = self.alloc_align(byte_size, core::mem::align_of::<T>())?;
+        unsafe {
+            let bytes_ptr: *mut T = allocated_bytes.as_mut_ptr() as *mut T;
+            let allocated_slice = core::slice::from_raw_parts_mut(bytes_ptr, src.len());
+            
+            allocated_slice.copy_from_slice(src);
+            Ok(allocated_slice)
+        }
     }
 
 }
