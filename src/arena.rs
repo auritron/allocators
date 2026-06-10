@@ -6,11 +6,13 @@ enum ArenaError {
     AlignmentError,
 }
 
+#[repr(align(8))]
 pub struct Arena<const N: usize = DEFAULT_CAPACITY> {
     container: [u8; N],
     offset: usize,
 }
 
+// constructors and accessors
 impl<const N: usize> Arena<N> {
 
     pub fn new() -> Self {
@@ -23,9 +25,12 @@ impl<const N: usize> Arena<N> {
     }
 
     pub fn capacity(&self) -> usize { N }
-
     pub fn allocated_bytes(&self) -> usize { self.offset }
 
+}
+
+// direct allocation
+impl<const N: usize> Arena<N> {
 
     pub fn alloc_bytes<'a>(&'a mut self, size: usize) -> Result<&'a mut [u8], ArenaError> {
         unsafe {
@@ -53,19 +58,46 @@ impl<const N: usize> Arena<N> {
 
     }
 
-    pub fn alloc_slice<'a>(&'a mut self, src: &[u8]) -> Result<&'a mut [u8], ArenaError> {
+    pub fn reset(&mut self) -> () {
+        self.offset = 0;
+    }
+
+}
+
+// slice allocation
+impl<const N: usize> Arena<N> {
+
+    pub fn alloc_slice_bytes<'a>(&'a mut self, src: &[u8]) -> Result<&'a mut [u8], ArenaError> {
         let allocated_mem: &mut [u8] = self.alloc_bytes(src.len())?;
         allocated_mem.copy_from_slice(src);
         Ok(allocated_mem)
     }
 
     pub fn alloc_str<'a>(&'a mut self, slice: &str) -> Result<&'a mut str, ArenaError> {
-        let allocated_str_bytes = self.alloc_slice(slice.as_bytes())?;
+        let allocated_str_bytes = self.alloc_slice_bytes(slice.as_bytes())?;
         Ok(core::str::from_utf8_mut(allocated_str_bytes).unwrap())
     }
 
-    pub fn reset(&mut self) -> () {
-        self.offset = 0;
+}
+
+// generic allocation
+impl <const N: usize> Arena<N> {
+
+    pub fn alloc<'a, T>(&'a mut self, value: T) -> Result<&'a mut T, ArenaError> {
+        let size = core::mem::size_of::<T>();
+        let allocated_bytes: &mut [u8]  = self.alloc_align(size, core::mem::align_of::<T>())?;
+        unsafe { 
+            let bytes_ptr = allocated_bytes.as_mut_ptr() as *mut T;
+            core::ptr::write(bytes_ptr, value);
+            Ok(&mut *bytes_ptr)
+        }
+    }
+
+    pub fn alloc_slice<'a, T>(&'a mut self, src: &[T]) -> Result<&'a mut [T], ArenaError>
+    where
+        T: Copy,
+    {
+
     }
 
 }
