@@ -1,4 +1,5 @@
 use core::cell::Cell;
+use std::{cell::UnsafeCell, mem::MaybeUninit};
 
 const DEFAULT_CAPACITY: usize = 1024;
 
@@ -10,7 +11,7 @@ pub enum ArenaError {
 
 #[repr(align(8))]
 pub struct Arena<const N: usize = DEFAULT_CAPACITY> {
-    container: [u8; N],
+    container: UnsafeCell<[MaybeUninit<u8>; N]>,
     offset: Cell<usize>,
 }
 
@@ -20,7 +21,7 @@ impl<const N: usize> Arena<N> {
     pub fn new() -> Self {
 
         Self {
-            container: [0; N],
+            container: UnsafeCell::new([MaybeUninit::uninit(); N]),  
             offset: Cell::new(0),
         } 
 
@@ -36,11 +37,12 @@ impl<const N: usize> Arena<N> {
 
     pub fn alloc_bytes<'a>(&'a self, size: usize) -> Result<&'a mut [u8], ArenaError> {
         unsafe {
-            let new_offset = self.offset.get() + size;
+            let cur_offset = self.offset.get();
+            let new_offset = cur_offset + size;
             if (new_offset) <= N {
-                let start_ptr: *mut u8 = self.container.as_ptr() as *mut u8;
+                let start_ptr = self.container.get() as *mut u8;
                 self.offset.set(new_offset);
-                Ok(core::slice::from_raw_parts_mut(start_ptr.add(new_offset - size), size))
+                Ok(core::slice::from_raw_parts_mut(start_ptr.add(cur_offset), size))
             } else {
                 Err(ArenaError::AllocationError)
             }
@@ -51,10 +53,10 @@ impl<const N: usize> Arena<N> {
 
         if align == 0 || (align & (align - 1)) != 0 { return Err(ArenaError::AlignmentError);}
 
-        let cur_addr = unsafe { (self.container.as_ptr() as *mut u8).add(self.offset.get()) } as usize;
+        let cur_addr = unsafe { (self.container.get() as *mut u8).add(self.offset.get()) } as usize;
         let align_addr = (cur_addr + align - 1) & !(align - 1);
         let padding = align_addr - cur_addr;
-        
+
         let new_offset = self.offset.get() + padding;
         if new_offset + size > N { return Err(ArenaError::AllocationError); }
         self.offset.set(new_offset);
@@ -113,3 +115,8 @@ impl <const N: usize> Arena<N> {
     }
 
 }
+
+// 1. Convert container from [u8; N] -> Unsafe<[MaybeUninit<u8>; N]> (DONE)
+// 2. Add methods for heap fallback when space allocation runs out
+// 3. Implement the Drop trait for automatic destruction of heap memory upon dellocation
+// 4. Implement Send and Sync traits for thread safety
