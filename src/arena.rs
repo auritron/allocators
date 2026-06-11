@@ -3,9 +3,6 @@ use core::{cell::UnsafeCell, mem::MaybeUninit};
 use core::alloc::Layout;
 use alloc::alloc::{alloc, dealloc};
 
-use crate::arena::AllocLocation::HeapAlloc;
-use crate::arena::ArenaError::AllocationError;
-
 extern crate alloc;
 
 const DEFAULT_CAPACITY: usize = 1024;
@@ -103,7 +100,21 @@ impl<const N: usize> Arena<N> {
     }
 
     pub fn reset(&mut self) -> () {
-        self.offset.set(0);
+
+        unsafe {
+
+            self.offset.set(0);
+            let mut next_ptr = self.head.get();
+            let mut cur_ptr = next_ptr;
+            while !next_ptr.is_null() {
+                next_ptr = (*cur_ptr).next;
+                dealloc(cur_ptr as *mut u8, (*cur_ptr).layout);
+                cur_ptr = next_ptr;
+            }
+            self.head.set(core::ptr::null_mut());
+
+        }
+
     }
 
 }
@@ -171,7 +182,7 @@ impl<const N: usize> Arena<N> {
             let data_layout = Layout::from_size_align(size, align).map_err(|_| ArenaError::AlignmentError)?;
             let (new_layout, new_offset) = head_layout.extend(data_layout).map_err(|_| ArenaError::AllocationError)?;
 
-            let alloc_block_ptr: *mut u8 = alloc::alloc::alloc(new_layout);
+            let alloc_block_ptr: *mut u8 = alloc(new_layout);
             if alloc_block_ptr.is_null() { return Err(ArenaError::AllocationError); }
             let new_heapnode_ptr: *mut HeapNode = alloc_block_ptr as *mut HeapNode;
             
@@ -211,7 +222,7 @@ impl<const N: usize> Arena<N> {
             allocated_slice.copy_from_slice(src);
             Ok(AllocSuccess { 
                 alloc_res: allocated_slice, 
-                alloc_loc: HeapAlloc, 
+                alloc_loc: AllocLocation::HeapAlloc, 
             })
 
         }
@@ -258,10 +269,13 @@ impl<const N: usize> Arena<N> {
 
 }
 
-/*/
 impl<const N: usize> Drop for Arena<N> {
 
-}*/
+    fn drop(&mut self) {
+        self.reset();
+    }
+
+}
 
 // 1. Convert container from [u8; N] -> Unsafe<[MaybeUninit<u8>; N]> (DONE)
 // 2. Add methods for heap fallback when space allocation runs out (DONE)
