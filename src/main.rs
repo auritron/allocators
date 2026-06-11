@@ -1,3 +1,5 @@
+#![no_std]
+
 pub mod tests;
 pub mod arena;
 

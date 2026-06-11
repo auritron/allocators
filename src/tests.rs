@@ -14,7 +14,7 @@ pub fn test_basic_allocation() {
     }
 
     {
-      let num2 = arena.alloc(100u64).unwrap();
+        let num2 = arena.alloc(100u64).unwrap();
         assert_eq!(*num2, 100);  
     }
 
@@ -64,15 +64,15 @@ pub fn test_alignment() {
 
     let byte_ref = arena.alloc(1u8).unwrap();
     let byte_addr = byte_ref as *const u8 as usize;
-    println!("u8 address:  {:#x} (Alignment: 1)", byte_addr);
+    //println!("u8 address:  {:#x} (Alignment: 1)", byte_addr);
 
     let u32_ref = arena.alloc(100u32).unwrap();
     let u32_addr = u32_ref as *const u32 as usize;
-    println!("u32 address: {:#x} (Alignment: 4)", u32_addr);
+    //println!("u32 address: {:#x} (Alignment: 4)", u32_addr);
 
     let u64_ref = arena.alloc(5000u64).unwrap();
     let u64_addr = u64_ref as *const u64 as usize;
-    println!("u64 address: {:#x} (Alignment: 8)", u64_addr);
+    //println!("u64 address: {:#x} (Alignment: 8)", u64_addr);
 
     assert_eq!(u32_addr % 4, 0, "u32 address is not aligned to 4 :/");
     assert_eq!(u64_addr % 8, 0, "u64 address is not aligned to 8 :/");
