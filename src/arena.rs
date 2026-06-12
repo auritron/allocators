@@ -42,6 +42,7 @@ pub enum AllocLocation {
 // constructors and accessors
 impl<const N: usize> Arena<N> {
 
+    // Intialize new arena
     pub fn new() -> Self {
 
         Self {
@@ -52,9 +53,10 @@ impl<const N: usize> Arena<N> {
 
     }
 
-    pub fn capacity(&self) -> usize { N }
-    pub fn allocated_bytes(&self) -> usize { self.offset.get() }
+    pub fn capacity(&self) -> usize { N } // Get arena capacity
+    pub fn allocated_bytes(&self) -> usize { self.offset.get() } // Get number of bytes allocated in the arena (offset)
 
+    // Add a new node to the heapnode linked list with layout
     unsafe fn update_heapnode_with_layout(&self, head_ptr: *mut HeapNode, new_layout: Layout) {
         unsafe {
             core::ptr::write(head_ptr, HeapNode { 
@@ -70,6 +72,7 @@ impl<const N: usize> Arena<N> {
 // direct allocation
 impl<const N: usize> Arena<N> {
 
+    // Allocate raw bytes
     pub fn alloc_bytes<'a>(&'a self, size: usize) -> Result<&'a mut [u8], ArenaError> {
         unsafe {
             let cur_offset = self.offset.get();
@@ -84,6 +87,7 @@ impl<const N: usize> Arena<N> {
         }
     }
 
+    // Allocate certain number of bytes with given alignment
     pub fn alloc_align<'a>(&'a self, size: usize, align: usize) -> Result<&'a mut [u8], ArenaError> {
 
         if align == 0 || (align & (align - 1)) != 0 { return Err(ArenaError::AlignmentError);}
@@ -99,6 +103,7 @@ impl<const N: usize> Arena<N> {
 
     }
 
+    // Free all memory in the arena
     pub fn reset(&mut self) -> () {
 
         unsafe {
@@ -122,12 +127,14 @@ impl<const N: usize> Arena<N> {
 // slice allocation
 impl<const N: usize> Arena<N> {
 
+    // Allocate a slice of bytes
     pub fn alloc_slice_bytes<'a>(&'a self, src: &[u8]) -> Result<&'a mut [u8], ArenaError> {
         let allocated_mem: &mut [u8] = self.alloc_bytes(src.len())?;
         allocated_mem.copy_from_slice(src);
         Ok(allocated_mem)
     }
 
+    // Allocate a string slice
     pub fn alloc_str<'a>(&'a self, slice: &str) -> Result<&'a mut str, ArenaError> {
         let allocated_str_bytes = self.alloc_slice_bytes(slice.as_bytes())?;
         Ok(core::str::from_utf8_mut(allocated_str_bytes).unwrap())
@@ -138,6 +145,7 @@ impl<const N: usize> Arena<N> {
 // generic allocation
 impl<const N: usize> Arena<N> {
 
+    // Allocate space for an object of type T and moves the object into the memory, returns the object back if it values
     pub fn alloc<'a, T>(&'a self, value: T) -> Result<&'a mut T, (ArenaError, T)> {
         let size = core::mem::size_of::<T>();
         let align = core::mem::align_of::<T>();
@@ -153,6 +161,7 @@ impl<const N: usize> Arena<N> {
         
     }
 
+    // Allocate slice for an object of type T, copies all of it to that space, and returns a reference to that slice
     pub fn alloc_slice<'a, T>(&'a self, src: &[T]) -> Result<&'a mut [T], ArenaError>
     where
         T: Copy,
@@ -174,6 +183,7 @@ impl<const N: usize> Arena<N> {
 // heap fallback
 impl<const N: usize> Arena<N> {
 
+    // Allocates memory on the heap in bytes, stores the pointer to the head of the arena, and returns the pointer to that memory
     pub unsafe fn alloc_heap_bytes(&self, size: usize, align: usize) -> Result<*mut u8, ArenaError> {
 
         unsafe {
@@ -193,21 +203,29 @@ impl<const N: usize> Arena<N> {
 
     }
 
-    pub fn alloc_heap<'a, T>(&'a self, value: T) -> Result<AllocSuccess<'a, T>, ArenaError> {
+    // Allocates memory on the heap for object T, and moves object into the heap memory, also returns value if failure
+    pub fn alloc_heap<'a, T>(&'a self, value: T) -> Result<AllocSuccess<'a, T>, (ArenaError, T)> {
 
         unsafe {
             let size = core::mem::size_of::<T>();
             let align = core::mem::align_of::<T>();
-            let heap_ptr: *mut T = self.alloc_heap_bytes(size, align)? as *mut T;
-            core::ptr::write(heap_ptr, value);
-            return Ok(AllocSuccess { 
-                alloc_res: &mut *heap_ptr, 
-                alloc_loc: AllocLocation::HeapAlloc,
-            });
+            let allocation_res: Result<*mut u8, ArenaError>  = self.alloc_heap_bytes(size, align);
+            match allocation_res {
+                Ok(res) => {
+                    let heap_ptr = res as *mut T;
+                    core::ptr::write(heap_ptr, value);
+                    Ok(AllocSuccess { 
+                        alloc_res: &mut *heap_ptr, 
+                        alloc_loc: AllocLocation::HeapAlloc,
+                    })
+                },
+                Err(e) => { Err((e, value)) }
+            }
         }
 
     }
 
+    // Allocates memory on the heap for a slice of object T, copies the slice and returns the reference
     pub fn alloc_heap_slice<'a, T>(&'a self, src: &[T]) -> Result<AllocSuccess<'a, [T]>, ArenaError>
     where
         T: Copy
@@ -229,7 +247,8 @@ impl<const N: usize> Arena<N> {
 
     }
 
-    pub fn try_alloc<'a, T>(&'a self, value: T) -> Result<AllocSuccess<'a, T>, ArenaError> {
+    // Attempts to allocate memory in the arena for an object T, if fails, tries on the heap, if fails, returns the object
+    pub fn try_alloc<'a, T>(&'a self, value: T) -> Result<AllocSuccess<'a, T>, (ArenaError, T)> {
 
         let arena_alloc_res: Result<&mut T, (ArenaError, T)> = self.alloc(value);
         match arena_alloc_res {
@@ -248,6 +267,7 @@ impl<const N: usize> Arena<N> {
 
     }
 
+    // Attemptes to allocate memory in the arena for a slice of object T, if fails, tries on the heap, raises error if fails
     pub fn try_alloc_slice<'a, T: Copy>(&'a self, src: &[T]) -> Result<AllocSuccess<'a, [T]>, ArenaError>
     where
         T: Copy
@@ -269,6 +289,7 @@ impl<const N: usize> Arena<N> {
 
 }
 
+// Resets arena and deallocates heap objects automatically on the arena going out of scope
 impl<const N: usize> Drop for Arena<N> {
 
     fn drop(&mut self) {
@@ -276,9 +297,3 @@ impl<const N: usize> Drop for Arena<N> {
     }
 
 }
-
-// 1. Convert container from [u8; N] -> Unsafe<[MaybeUninit<u8>; N]> (DONE)
-// 2. Add methods for heap fallback when space allocation runs out (DONE)
-// 3. Implement the Drop trait for automatic destruction of heap memory upon dellocation
-// 4. Re-evaluate &self -> &mut self in alloc_bytes() and alloc_align() for safety
-// 5. Implement Send and Sync traits for thread safety
