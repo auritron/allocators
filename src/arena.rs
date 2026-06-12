@@ -214,7 +214,7 @@ impl<const N: usize> Arena<N> {
                 Ok(res) => {
                     let heap_ptr = res as *mut T;
                     core::ptr::write(heap_ptr, value);
-                    Ok(AllocSuccess { 
+                    Ok(AllocSuccess {
                         alloc_res: &mut *heap_ptr, 
                         alloc_loc: AllocLocation::HeapAlloc,
                     })
