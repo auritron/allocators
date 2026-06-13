@@ -7,7 +7,7 @@ extern crate alloc;
 
 const DEFAULT_CAPACITY: usize = 1024;
 
-#[repr(align(8))]
+#[repr(align(16))]
 pub struct Arena<const N: usize = DEFAULT_CAPACITY> {
     container: UnsafeCell<[MaybeUninit<u8>; N]>,
     head: Cell<*mut HeapNode>,
