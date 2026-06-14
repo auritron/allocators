@@ -14,6 +14,7 @@ pub struct Arena<const N: usize = DEFAULT_CAPACITY> {
     offset: Cell<usize>,
 }
 
+#[repr(C)]
 pub struct HeapNode {  //dynamic block linker
     next: *mut HeapNode,
     layout: Layout,
